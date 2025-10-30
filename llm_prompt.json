@@ -1,0 +1,272 @@
+{
+  "title": "Coatmaster Flex QML App Development Guide for LLMs",
+  "description": "This guide provides all the necessary information to create custom QML applications for the Coatmaster Flex device.",
+
+  "critical_deployment_requirements": {
+    "main_file": "The root QML file MUST be named `App.qml`.",
+    "assets": "Assets like images or additional QML files can be placed in sub-folders (e.g., `/lib`, `/images`).",
+    "upload": "Upload the final `App.qml` file through the Coatmaster Flex web interface."
+  },
+
+  "project_structure_and_imports": {
+    "mandatory_imports": [
+      "import QtQuick 2.15",
+      "import QtQuick.Layouts 1.15 // Optional, for GridLayout",
+      "import QtQuick.Controls 2.15",
+      "import \"../lib/utils.js\" as Utils",
+      "import \"../lib\"",
+      "import FlexUi 1.0"
+    ],
+    "root_element": {
+      "description": "The root element of your application must be an `Item`.",
+      "code": "Item {\n    id: app\n    anchors.fill: parent\n    property string appId: \"\" // the root item must have the string property appId!!!\n}"
+    }
+  },
+
+  "core_concepts": {
+    "navigation_system": {
+      "critical": true,
+      "description": "The UI is based on a grid system for navigation with the device's directional keys (no mouse/touch or keyboard). The whole navigation is done with the FlexQmlItem.",
+      "key_points": [
+        "The FlexQmlItem get focused and activated by the gridsystem, but a FlexQmlItem can acquire the keyCapture.",
+        "By default the gridsystem gets the keyCapture when the dialog is shown.",
+        "only one item can have the keyCapture, the gridsystem or one of the FlexQmlItems!",
+        "Every interactive element **MUST** have a unique `navigationRow` and `navigationColumn`.",
+        "Multiple items can share the same coordinates if only one is `active` (i.e., selectable) at any given time.",
+        "For multi-page applications, use a `StackView` to manage navigation focus and active items automatically.",
+        {
+            "description": "if the the app does not need a gridbased navigation a single FlexQmlItem can be added to the App. After the dialog turned visible we can give the keyCapture to the FlexQmlItem by setting keyCapture to true, it will then be the only input and we can connect slots to the keyOk, keyLeft, keyRight, keyUp, keyDown, keyBack and keyTrigger. The onKeyBack should be implemented on this FlexQmlItem so the app can still be closed with the back key.",
+            "code": "Connections {\n        target: FlexDialog\n        onKeyBackPressed: {\n            FlexDialog.closeDialog();\n        }\n        onTriggerPressed: {\n            if (gameState === \"Ready\" || gameState === \"GameOver\") {\n                startGame();\n            }\n        }\n        onVisibleChanged: {\n            if (FlexDialog.visible) {\n                // Capture keys once dialog is visible\n                inputHandler.keyCapture = true;\n            }\n        }\n    }"
+        }
+      ],
+      "additional_files": "if the App needs more than one qml file also create a qmldir file that lists the additional files like this\n\nTest 1.0 Test.qml\nCustomQml 1.0 CustomQml.qml"
+    },
+
+    "flex_qml_item_base_component": {
+      "description": "The FlexQmlItem only has these properties, you MUST NOT try to access any other properties, also only connect to exactly these listed signals, double check if no other properties than the listed are used",
+      "cpp_class": "c++ class FlexQmlItem",
+      "properties": [
+        "Q_PROPERTY(QObject* flexDialog READ flexDialog WRITE setFlexDialog NOTIFY flexDialogChanged)",
+        "Q_PROPERTY(int navigationRow READ navigationRow WRITE setNavigationRow NOTIFY navigationRowChanged)",
+        "Q_PROPERTY(int navigationColumn read navigationColumn WRITE setNavigationColumn NOTIFY navigationColumnChanged)",
+        "Q_PROPERTY(bool isFocused READ isFocused WRITE setIsFocused NOTIFY isFocusedChanged)",
+        "Q_PROPERTY(bool selectable read selectable WRITE setSelectable NOTIFY selectableChanged FINAL)",
+        "Q_PROPERTY(bool keyCapture read keyCapture WRITE setKeyCapture NOTIFY keyCaptureChanged FINAL)",
+        "Q_PROPERTY(QColor foregroundColor read foregroundColor CONSTANT)",
+        "Q_PROPERTY(QColor backgroundColor read backgroundColor CONSTANT)",
+        "Q_PROPERTY(QColor accentColor read accentColor CONSTANT)"
+      ],
+      "signals": [
+        "void focusChangeFromQml(bool focused);",
+        "void navigationRowChanged();",
+        "void navigationColumnChanged();",
+        "void isFocusedChanged();",
+        "void activated();",
+        "void selectableChanged();",
+        "void keyUp();",
+        "void keyDown();",
+        "void keyLeft();",
+        "void keyRight();",
+        "void keyOk();",
+        "void keyBack();",
+        "void keyTrigger();",
+        "void flexDialogChanged();"
+      ]
+    },
+    "flex_dialog": {
+      "description": "The FlexDialog is a global object that provides access to dialog-wide properties and signals. Only the following properties can be used, you MUST NOT try to access any other properties.",
+      "properties": [
+        "Q_PROPERTY(QString unit READ unit CONSTANT)",
+        "Q_PROPERTY(QColor foregroundColor READ foregroundColor CONSTANT)",
+        "Q_PROPERTY(QColor backgroundColor READ backgroundColor CONSTANT)",
+        "Q_PROPERTY(QColor accentColor READ accentColor CONSTANT)",
+        "Q_PROPERTY(SizingBehavior sizingBehavior READ sizingBehavior WRITE setSizingBehavior NOTIFY sizingBehaviorChanged)",
+        "Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged)"
+      ]
+    }
+  },
+
+  "networking": {
+    "local_server_with_utils_js": {
+      "description": "For accessing the local Coatmaster server API, use the provided `utils.js` library. The functions return a `Promise`.",
+      "import": "import \"../lib/utils.js\" as Utils",
+      "functions": [
+        "Utils.get(path)",
+        "Utils.post(path, data)",
+        "Utils.put(path, data)",
+        "Utils.patch(path, data)",
+        "Utils.del(path)"
+      ],
+      "example": {
+        "description": "Fetching measurement configurations on startup.",
+        "code": "Component.onCompleted: {\n    Utils.get(\"/configurations\").then(function(data) {\n        data.forEach(function(config) {\n            if (config.isMeasureValid) {\n                configurationsModel.append(config);\n            }\n        });\n    }).catch(function(error) {\n        console.log(\"Error fetching configurations:\", error);\n    });\n}"
+      }
+    },
+    "remote_servers_via_proxy": {
+      "description": "To access external servers, you must use the built-in proxy. Use the standard `XMLHttpRequest` object for these requests.",
+      "url_format": "\"http://localhost:9883/proxy?target=<your_full_remote_url>\""
+    }
+  },
+
+  "advanced_ui_patterns": {
+    "multi_page_applications_with_stackview": {
+      "description": "Use a `StackView` to manage navigation between different pages or screens within your app.",
+      "code": "StackView {\n    id: stackView\n    anchors.fill: parent\n    initialItem: mainPageComponent\n}\n\nComponent {\n    id: mainPageComponent\n    Item {\n        FlexButton {\n            text: \"Go to Details\"\n            onClicked: {\n                // Push the next page onto the stack\n                stackView.push(detailPageComponent, { \"itemId\": 123 });\n            }\n        }\n    }\n}\n\nComponent {\n    id: detailPageComponent\n    Item {\n        // Properties passed from push() are available here\n        property var itemId\n\n        signal finished() // Signal to pop the view\n\n        // Remember to handle the back key to pop the view\n        Connections {\n            target: FlexDialog\n            onKeyBackPressed: stackView.pop()\n        }\n    }\n}"
+    }
+  },
+
+  "device_hardware_integration": {
+    "wifi_information": {
+      "description": "The FlexQmlWifi only has these properties, you MUST NOT try to access any other properties",
+      "cpp_class": "c++ class FlexQmlWifi",
+      "properties": [
+        "Q_PROPERTY(QString ssid READ ssid NOTIFY ssidChanged FINAL)",
+        "Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged FINAL)",
+        "Q_PROPERTY(int signalStrength READ signalStrength NOTIFY signalStrengthChanged FINAL)",
+        "Q_PROPERTY(QString ipAddress READ ipAddress NOTIFY ipAddressChanged FINAL)",
+        "Q_PROPERTY(QString macAddress READ macAddress NOTIFY macAddressChanged FINAL)"
+      ],
+      "signals": [
+        "void ssidChanged(QString ssid);",
+        "void connectedChanged(bool connected);",
+        "void signalStrengthChanged(int strength);",
+        "void ipAddressChanged(QString ipAddress);",
+        "void macAddressChanged(QString macAddress);"
+      ]
+    },
+    "qr_code_generation": {
+      "description": "The FlexQmlQrCode only has these properties, you MUST NOT try to access any other properties\nDisplay a QR code from a string.",
+      "cpp_class": "c++ class FlexQmlQrCode",
+      "properties": [
+        "Q_PROPERTY(QString text READ text WRITE setText NOTIFY textChanged)",
+        "Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)",
+        "Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY backgroundColorChanged)"
+      ],
+      "signals": [
+        "void textChanged();",
+        "void colorChanged();",
+        "void backgroundColorChanged();"
+      ]
+    }
+  },
+
+  "ui_components": {
+    "description": "These are pre-built UI components that should be preferred over creating custom navigation elements. For these components, the `selectable` property of the underlying `FlexQmlItem` is automatically managed via `selectable: root.enabled && root.visible`.",
+    "components": {
+        "FlexButton": {
+            "description": "A standard button that can be used in the grid navigation. It has all the Qml properties of a Button plus the ones listed ",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused"
+            ],
+            "signals": [
+                "clicked()"
+            ]
+        },
+        "FlexCheckbox": {
+            "description": "A checkbox that can be used in the grid navigation. It has all the Qml properties of a CheckBox plus the ones listed ",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused",
+                "checked"
+            ],
+            "signals": []
+        },
+        "FlexComboBox": {
+            "description": "A combo box that can be used in the grid navigation. It takes over key capture to allow selection from the dropdown. It has all the Qml properties of a ComboBox plus the ones listed ",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused",
+                "model",
+                "textRole"
+            ],
+            "signals": [
+                "selected(int index, var item)"
+            ]
+        },
+        "FlexList": {
+            "description": "A list view that can be used in the grid navigation. It takes over key capture to allow selection from the list. It has all the Qml properties of a List plus the ones listed.",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused",
+                "alias keyCapture",
+                "model",
+                "textRole"
+            ],
+            "signals": [
+                "selected(int index, var item)",
+                "keyBack()"
+            ]
+        },
+        "FlexPopupDialog": {
+            "description": "A popup dialog that can be used to show messages and get user input.",
+            "properties": [
+                "string title",
+                "string text"
+            ],
+            "signals": [
+                "accepted()",
+                "rejected()"
+            ]
+        },
+        "FlexScrollView": {
+            "description": "A scrollable view that can be used to display content that is larger than the screen. It takes over key capture to allow scrolling.",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused",
+                "alias content"
+            ],
+            "signals": []
+        },
+        "FlexTextInput": {
+            "description": "A text input field that opens a keyboard when activated. keyboard types are full, numeric and normal",
+            "properties": [
+                "alias navigationRow",
+                "alias navigationColumn",
+                "alias isFocused",
+                "string keyboardType"
+            ],
+            "signals": []
+        }
+    }
+  },
+
+  "deployment_checklist": [
+    "[ ] The App has correct syntax and the root item has the property string appId: \"\"",
+    "[ ] All necessary imports are included. especially  import \"../lib/utils.js\" as Utils import \"../lib\" import FlexUi 1.0"
+    "[ ] All interactive items have `navigationRow` and `navigationColumn`. The FlexQmlItem has the property  \"flexDialog: FlexDialog\"",
+    "[ ] No properties assigned to the custom Qml components that are not in this documentation",
+    "[ ] The `onKeyBackPressed` signal is handled correctly to close or pop views.",
+    "[ ] Network and measurement errors are handled.",
+    "[ ] Loading states are indicated with a `BusyIndicator`.",
+    "[ ] All assets (images, etc.) are referenced with correct paths."
+  ],
+
+  "examples": {
+    "general_ui_app": {
+      "description": "General Ui app",
+      "code": "// Import necessary QML modules for UI, layouts, and controls.\nimport QtQuick 2.15\nimport QtQuick.Layouts 1.15\nimport QtQuick.Controls 2.15\n// Import the JavaScript utility library for making HTTP requests.\nimport \"../lib/utils.js\" as Utils\nimport \"../lib\"\n// Import the custom Flex UI components.\nimport FlexUi 1.0\n\n\n// The root item of the application.\nItem {\n    id: app\n    // A property to track if the app is busy loading data.\n    property bool isLoading: false\n    anchors.fill: parent\n    property string appId: \"\"\n\n    // --- FlexQmlMeasure: Handles all measurement logic ---\n    FlexQmlMeasure {\n        id: measureItem\n        // This signal is triggered when a new measurement is completed.\n        onNewMeasurement: function (measurement) {\n            if (measurement && 'displayStatus' in measurement) {\n                var displayStatus = measurement.displayStatus;\n                // Set the color of the result text based on the status.\n                if ('colourCode' in displayStatus && displayStatus.colourCode) {\n                    resultThicknessText.color = displayStatus.colourCode.trim();\n                } else {\n                    resultThicknessText.color = FlexDialog.foregroundColor;\n                }\n                // Display the thickness if available.\n                if ('showThickness' in displayStatus && displayStatus.showThickness === true) {\n                    resultThicknessText.text = measurement.thicknessString + \" \" + FlexDialog.unit;\n                    messageItem.text = \"\";\n                } else {\n                    resultThicknessText.text = \"-.-\";\n                }\n                // Display any additional status text.\n                if ('text' in displayStatus && displayStatus.text) {\n                    messageItem.text = displayStatus.text;\n                }\n            } else {\n                resultThicknessText.text = \"-.-\";\n            }\n        }\n\n        // This signal is triggered if an error occurs during measurement.\n        onError: function(message) {\n            messageItem.text = message;\n        }\n    }\n\n    // --- Connections: Handle global device events ---\n    Connections {\n        target: FlexDialog\n        // Trigger a measurement when the hardware trigger is pressed.\n        onTriggerPressed: {\n            measureItem.measure();\n        }\n        // Close the app when the hardware back button is pressed.\n        onKeyBackPressed: {\n            FlexDialog.closeDialog();\n        }\n    }\n\n    Image {\n        anchors.fill: parent\n        source: \"coatmasterFlex.png\"\n        fillMode: Image.PreserveAspectCrop\n        asynchronous: true\n        opacity: 0.3\n    }\n\n    // A busy indicator that is visible when the app is loading or measuring.\n    BusyIndicator {\n        anchors.centerIn: parent\n        running: app.isLoading || measureItem.busy\n        visible: running\n        z: 2 // Ensure it's on top of other elements.\n    }\n\n    // --- Component Initialization ---\n    Component.onCompleted: {\n        // Set loading to true while we fetch initial data.\n        app.isLoading = true;\n\n        // Fetch the list of configurations from the server.\n        Utils.httpRequest(\"GET\", \"/configurations\").then(function (data) {\n\n            console.log(\"configurations data:\", JSON.stringify(data, null, 2));\n            // Map the server response to the format needed by the ListModel.\n            var modelData = data.map(q => ({\n                                               \"id\": q.id,\n                                               \"name\": q.name,\n                                               \"isMeasureValid\": q.isMeasureValid,\n                                               \"isReadOnly\": q.isReadOnly\n                                           }));\n            // Append each item to the ListModel for the ComboBox.\n            modelData.forEach(q => {if(q.isMeasureValid){appListModel.append(q)}});\n            // Set loading to false now that data is loaded.\n            app.isLoading = false;\n            // Set the initial selection in the ComboBox.\n            appListView.currentIndex = 0\n        });\n\n        // Populate a local model for the FlexList.\n        lineModel.append({\"value\": 1, \"name\": \"line A\"});\n        lineModel.append({\"value\": 2, \"name\": \"line B\"});\n        lineModel.append({\"value\": 3, \"name\": \"line C\"});\n    }\n\n    // --- Data Models ---\n    ListModel { id: appListModel }\n    ListModel { id: lineModel }\n\n    // --- UI Layout ---\n    GridLayout {\n        columns: 2\n        anchors.fill: parent\n\n        Text {\n            text: \"demo app\"\n            Layout.row: 0; Layout.column: 0; Layout.columnSpan: 2\n            font.pointSize: 24\n            horizontalAlignment: Qt.AlignHCenter\n            Layout.fillWidth: true\n        }\n\n        // Text to display the measurement result.\n        Text {\n            id: resultThicknessText\n            text: \"\"\n            Layout.row: 1; Layout.column: 0; Layout.columnSpan: 2\n            font.pointSize: 44; font.bold: true\n            horizontalAlignment: Qt.AlignHCenter\n            Layout.fillWidth: true\n        }\n\n        // A list displaying the 'lineModel'.\n        FlexList {\n            id: appListView\n            navigationRow: 0; navigationColumn: 0\n            Layout.row: 2; Layout.column: 0; Layout.columnSpan: 2\n            Layout.fillWidth: true; Layout.fillHeight: true\n            model: lineModel\n            textRole: \"name\"\n            onSelected: function (index, app) {\n                // This is where you would handle a selection event from the list.\n            }\n        }\n\n        // An input field for text.\n        FlexTextInput {\n            navigationRow: 1; navigationColumn: 0\n            Layout.row: 3; Layout.column: 0\n            Layout.fillWidth: true\n            text: \"standard input\"\n        }\n\n        // A checkbox.\n        FlexCheckbox {\n            id: checkBox\n            navigationRow: 1; navigationColumn: 1\n            Layout.row: 3; Layout.column: 1\n        }\n\n        // A dropdown to select a measurement configuration.\n        FlexComboBox {\n            id: myCombobox\n            navigationRow: 2; navigationColumn: 0\n            Layout.row: 4; Layout.column: 0;// Layout.columnSpan: 1\n            //Layout.fillWidth: true\n            currentIndex: 0\n            model: appListModel\n            textRole: \"name\"\n            // When an item is selected, update the appId on the measureItem.\n            onSelected: function (index, app) {\n                measureItem.appId = app.id\n            }\n        }\n\n        FlexComboBox {\n            id: myCombobox_simple\n            navigationRow: 2; navigationColumn: 1\n            Layout.row: 4; Layout.column: 1;// Layout.columnSpan: 1\n            //Layout.fillWidth: true\n            currentIndex: 0\n            model: [\"a\", \"b\", \"c\"] // simple list model dont set textRole\n            //textRole: \"name\"\n            // When an item is selected, update the appId on the measureItem.\n            onSelected: function (index, item) {\n\n            }\n        }\n\n        // An input field for numbers.\n        FlexTextInput {\n            navigationRow: 3; navigationColumn: 0\n            Layout.row: 5; Layout.column: 0\n            Layout.fillWidth: true\n            keyboardType: \"numeric\"\n            text: \"345.56\"\n        }\n\n        // A button to trigger a measurement manually.\n        FlexButton {\n            navigationRow: 3; navigationColumn: 1\n            Layout.row: 5; Layout.column: 1\n            text: \"measure\"\n            // The button is only enabled if a configuration has been selected.\n            enabled: measureItem.appId >= 0\n            onClicked: {\n                measureItem.measure();\n            }\n        }\n\n        // Display the currently selected appId for debugging/info.\n        Text { text: \"current appId:\"; Layout.row: 6; Layout.column: 0 }\n        Text { text: measureItem.appId; Layout.row: 6; Layout.column: 1 }\n\n        // A text area for displaying messages or errors.\n        Text {\n            id: messageItem\n            text: \"\"\n            Layout.row: 7; Layout.column: 0; Layout.columnSpan: 2\n            wrapMode: Text.Wrap\n            Layout.fillWidth: true\n        }\n    }\n}"
+    },
+
+    "flappy_bird_example": {
+      "app_qml": "import QtQuick 2.15\nimport FlexUi 1.0\n\n\n// The root item for the game.\nItem {\n    id: root\n    anchors.fill: parent\n    clip: true\n\n    // --- Game Properties ---\n    property string gameState: \"Ready\" // \"Ready\", \"Playing\", \"GameOver\"\n    property bool gameRunning: gameState === \"Playing\"\n    property real gravity: 0.15\n    property real jumpVelocity: -3.5\n    property real backgroundSpeed: 1.5\n    property real pipeSpeed: 1.5\n    property int score: 0\n    property string appId: \"\"\n    property bool canRestart: false\n\n    // --- Functions ---\n    function restartGame() {\n        // Reset bird\n        bird.y = root.height / 2;\n        bird.velocityY = 0;\n\n        // Reset pipes\n        for (var i = 0; i < pipeRepeater.count; i++) {\n            var pipe = pipeRepeater.itemAt(i);\n            pipe.x = root.width + (i * 200);\n            pipe.randomizeHeight();\n            pipe.scored = false;\n        }\n\n        // Reset score\n        score = 0;\n\n        // Change state\n        gameState = \"Playing\";\n    }\n\n\n    // --- Parallax Background ---\n    Image {\n        id: background1\n        source: \"background.png\"\n        y: 0\n        x: 0\n        width: root.width\n        height: root.height\n        fillMode: Image.PreserveAspectCrop\n    }\n    Image {\n        id: background2\n        source: \"background.png\"\n        y: 0\n        x: root.width\n        width: root.width\n        height: root.height\n        fillMode: Image.PreserveAspectCrop\n    }\n\n    // --- Pipes ---\n    Repeater {\n        id: pipeRepeater\n        model: 3\n        delegate: Pipe {\n            id: pipe\n            property bool scored: false\n            x: root.width + (index * 200)\n        }\n    }\n\n    // --- The Bird ---\n    Image {\n        id: bird\n        source: \"bird.png\"\n        x: 50 // Adjusted for narrower screen\n        y: root.height / 2\n        width: 18 // Smaller bird for easier gameplay\n        height: 34 // Height maintaining aspect ratio (18:34 ≈ 40:75)\n        property real velocityY: 0\n    }\n\n    // --- UI Messages ---\n    Text {\n        id: scoreText\n        anchors.horizontalCenter: parent.horizontalCenter\n        anchors.top: parent.top\n        anchors.topMargin: 15\n        font.pointSize: 18\n        font.bold: true\n        color: \"white\"\n        text: score\n        visible: gameState === \"Playing\" || gameState === \"GameOver\"\n    }\n    Text { // \"Get Ready\" message\n        anchors.centerIn: parent\n        font.pointSize: 16\n        color: \"white\"\n        text: \"Press Trigger to Start\"\n        visible: gameState === \"Ready\"\n        wrapMode: Text.WordWrap\n        width: parent.width * 0.8\n        horizontalAlignment: Text.AlignHCenter\n    }\n    Rectangle { // Game Over screen\n        anchors.fill: parent\n        color: \"#80000000\" // Semi-transparent black\n        visible: gameState === \"GameOver\"\n\n        Text {\n            anchors.centerIn: parent\n            font.pointSize: 18\n            color: \"white\"\n            text: canRestart ? \"Game Over\\nScore: \" + score + \"\\nPress Trigger to Restart\" : \"Game Over\\nScore: \" + score\n            horizontalAlignment: Text.AlignHCenter\n            wrapMode: Text.WordWrap\n            width: parent.width * 0.9\n        }\n    }\n\n    // --- Game Over Timer ---\n    Timer {\n        id: gameOverTimer\n        interval: 1000  // 1 second\n        repeat: false\n        onTriggered: {\n            canRestart = true;\n        }\n    }\n\n    // --- Game Loop ---\n    Timer {\n        id: gameLoop\n        interval: 16\n        running: true  // Always running to show background\n        repeat: true\n        onTriggered: {\n            // Always animate background\n            background1.x -= backgroundSpeed;\n            background2.x -= backgroundSpeed;\n            if (background1.x <= -root.width) {\n                background1.x = background2.x + root.width;\n            }\n            if (background2.x <= -root.width) {\n                background2.x = background1.x + root.width;\n            }\n\n            // Only update game physics when playing\n            if (gameRunning) {\n                bird.velocityY += gravity;\n                bird.y += bird.velocityY;\n            }\n\n            // Only update pipes and collision when playing\n            if (gameRunning) {\n                for (var i = 0; i < pipeRepeater.count; i++) {\n                    var pipe = pipeRepeater.itemAt(i);\n                    pipe.x -= pipeSpeed;\n\n                    // Collision detection with proper pipe references\n                    if (bird.x < pipe.x + pipe.width && bird.x + bird.width > pipe.x) {\n                        if (bird.y < pipe.topPipe.y + pipe.topPipe.height || bird.y + bird.height > pipe.bottomPipe.y) {\n                            gameState = \"GameOver\";\n                            canRestart = false;\n                            gameOverTimer.start();\n                            return;\n                        }\n                    }\n\n                    if (pipe.x + pipe.width < bird.x && !pipe.scored) {\n                        score++;\n                        pipe.scored = true;\n                    }\n\n                    // Reposition pipe when it goes off screen\n                    if (pipe.x < -pipe.width) {\n                        // Find the rightmost pipe position\n                        var rightmostX = 0;\n                        for (var j = 0; j < pipeRepeater.count; j++) {\n                            var otherPipe = pipeRepeater.itemAt(j);\n                            if (otherPipe && otherPipe !== pipe && otherPipe.x > rightmostX) {\n                                rightmostX = otherPipe.x;\n                            }\n                        }\n                        pipe.x = rightmostX + 200;\n                        pipe.randomizeHeight();\n                        pipe.scored = false;\n                    }\n                }\n\n                if (bird.y >= root.height - bird.height || bird.y <= 0) {\n                    gameState = \"GameOver\";\n                    canRestart = false;\n                    gameOverTimer.start();\n                }\n            }\n        }\n    }\n\n    // --- Connections: Handle global device events ---\n    Connections {\n        target: FlexDialog\n        onKeyBackPressed: { FlexDialog.closeDialog(); }\n        onTriggerPressed: {\n            if (gameState === \"Ready\") {\n                restartGame();\n            } else if (gameState === \"Playing\") {\n                bird.velocityY = jumpVelocity;\n            } else if (gameState === \"GameOver\" && canRestart) {\n                restartGame();\n            }\n        }\n    }\n}",
+
+      "pipe_qml": "import QtQuick 2.15\n\nItem {\n    id: pipeRoot\n    width: 50\n    height: parent ? parent.height : 272\n\n    property int gapSize: 100\n    property int gapCenter: 136  // Default center position\n\n    // Expose pipe components for collision detection\n    property alias topPipe: topPipe\n    property alias bottomPipe: bottomPipe\n\n    function randomizeHeight() {\n        // Keep gap center between 25% and 75% of screen height\n        var minCenter = pipeRoot.height * 0.25\n        var maxCenter = pipeRoot.height * 0.75\n        pipeRoot.gapCenter = Math.floor(Math.random() * (maxCenter - minCenter)) + minCenter\n    }\n\n    // Top Pipe - extends from screen top down to gap\n    Image {\n        id: topPipe\n        source: \"pipe.png\"\n        width: pipeRoot.width\n        height: gapCenter - (gapSize / 2)\n        x: 0\n        y: 0\n        rotation: 180\n        transformOrigin: Item.Center\n        fillMode: Image.Stretch\n        visible: height > 0\n    }\n\n    // Bottom Pipe - extends from gap down to screen bottom\n    Image {\n        id: bottomPipe\n        source: \"pipe.png\"\n        width: pipeRoot.width\n        height: pipeRoot.height - (gapCenter + gapSize / 2)\n        x: 0\n        y: gapCenter + (gapSize / 2)\n        fillMode: Image.Stretch\n        visible: height > 0\n    }\n\n    Component.onCompleted: {\n        randomizeHeight()\n    }\n}",
+
+      "qmldir": "Pipe 1.0 Pipe.qml"
+    },
+
+    "stack_example": {
+      "app_qml": "// Import necessary QML modules for UI, layouts, and controls.\nimport QtQuick 2.15\nimport QtQuick.Layouts 1.15\nimport QtQuick.Controls 2.15\n// Import the JavaScript utility library for making HTTP requests.\nimport \"../lib/utils.js\" as Utils\nimport \"../lib\"\n// Import the custom Flex UI components.\nimport FlexUi 1.0\n\nItem {\n    id: app\n    anchors.fill: parent\n    property string appId: \"\"\n\n    property int configurationId: -1\n    property int blockId: -1\n\n    Component {\n        id: mainComponent\n        ColumnLayout {\n            anchors.fill: parent\n\n            onVisibleChanged: {\n                if(visible){\n                    startButton.isFocused = true\n                }\n            }\n\n            Component.onCompleted: {\n                Utils.get(\"/configurations\").then(function(data) {\n                    configurationsModel.clear();\n                    data.forEach(function(config) {\n                        configurationsModel.append(config);\n                    });\n\n                    if(configurationsModel.count>0){\n                        configurationComboBox.currentIndex = 0\n                    }\n                }).catch(function(error) {\n                    console.log(\"Failed to load configurations:\", error);\n                });\n            }\n\n            Text {\n                text: \"Measurement Plan\"\n                font.pointSize: 15\n                horizontalAlignment: Qt.AlignHCenter\n                Layout.fillWidth: true\n            }\n\n            FlexComboBox {\n                id: configurationComboBox\n                navigationRow: 0; navigationColumn: 0\n                Layout.fillWidth: true\n                model: configurationsModel\n                textRole: \"name\"\n                onSelected: function(index, item) {\n                    app.configurationId = item.id;\n                    blocksComboBox.enabled = true;\n                    startButton.enabled = false;\n                    blocksModel.clear();\n\n                    var path = \"/blocks?configId=\" + item.id;\n                    Utils.get(path).then(function(data) {\n                        data.forEach(function(block) {\n                            blocksModel.append(block);\n                        });\n\n                        if(blocksModel.count > 0){\n                            blocksComboBox.currentIndex = 0;\n                        }\n                    }).catch(function(error) {\n                        console.log(\"Failed to load blocks:\", error);\n                    });\n                }\n            }\n\n            FlexComboBox {\n                id: blocksComboBox\n                navigationRow: 1; navigationColumn: 0\n                Layout.fillWidth: true\n                model: blocksModel\n                textRole: \"name\"\n                enabled: false // Disabled until a configuration is selected\n                onSelected: function(index, item) {\n                    startButton.enabled = true;\n                    startButton.isFocused = true\n                    app.blockId = item.id\n                }\n            }\n\n            Item{\n                Layout.fillHeight: true\n            }\n\n            FlexButton {\n                id: startButton\n                navigationRow: 2; navigationColumn: 0\n                text: \"Start Measurement\"\n                enabled: false // Disabled until a block is selected\n                onClicked: {\n                    var component = stackView.push(measurementComponent, {\"appId\": app.configurationId, \"blockId\": blockId,\"currentPointIndex\":0});\n                    component.finished.connect(function() {\n                        var poppedItem = stackView.pop();\n                        if(poppedItem){\n                            poppedItem.destroy()\n                        }\n                    });\n                }\n            }\n        }\n    }\n\n    Component {\n        id: measurementComponent\n        Item {\n            id: measureApp\n\n            property string appId: \"\"\n            property string blockId: \"\"\n\n            property int currentPointIndex: 0\n            property var currentPoint: staticMeasurementPointsModel.get(currentPointIndex)\n\n            onVisibleChanged: {\n                if(visible){\n                    nextButton.isFocused = true\n                }\n            }\n\n            Component.onCompleted: {\n               nextButton.isFocused = true\n            }\n\n            Connections {\n                target: FlexDialog\n                function onTriggerPressed() {\n                    measureItem.measure(measureApp.blockId);\n                }\n            }\n\n            ListModel {\n                id: staticMeasurementPointsModel\n                ListElement { name: \"Point 1\"; image: \"point1.png\"; thickness: \"-.-\" }\n                ListElement { name: \"Point 2\"; image: \"point2.png\"; thickness: \"-.-\" }\n                ListElement { name: \"Point 3\"; image: \"point3.png\"; thickness: \"-.-\" }\n            }\n\n            signal finished()\n\n            FlexPopupDialog {\n                id: successPopup\n                title: \"Success\"\n                text: \"All measurements completed successfully.\"\n                //height:200 //just a test for the size\n                onAccepted: {\n                    measureApp.finished()\n                }\n            }\n\n            FlexQmlMeasure {\n                id: measureItem\n                appId: measureApp.appId\n                onNewMeasurement: function (measurement) {\n                    if (measurement && 'displayStatus' in measurement) {\n                        var displayStatus = measurement.displayStatus;\n                        if ('showThickness' in displayStatus && displayStatus.showThickness === true) {\n                            var point = staticMeasurementPointsModel.get(measureApp.currentPointIndex);\n                            point.thickness = measurement.thicknessString + \" \" + FlexDialog.unit;\n                            staticMeasurementPointsModel.set(measureApp.currentPointIndex, point);\n                            measureApp.currentPoint = staticMeasurementPointsModel.get(measureApp.currentPointIndex);\n                            if(areAllPointsMeasured()){\n                                successPopup.open()\n                            } //else {\n                              //  measureApp.nextPoint()\n                            //}\n                        }\n                    }\n                }\n                onError: function(message) {\n                    var messageItem = gridLayout.findChildByName(\"messageItem\");\n                    if (messageItem) {\n                        messageItem.text = message;\n                    }\n                }\n            }\n\n            function areAllPointsMeasured() {\n                for (var i = 0; i < staticMeasurementPointsModel.count; i++) {\n                    var point = staticMeasurementPointsModel.get(i);\n                    if (point.thickness === \"-.-\") {\n                        return false;\n                    }\n                }\n                return true;\n            }\n\n            function nextPoint(){\n                if (measureApp.currentPointIndex < staticMeasurementPointsModel.count - 1) {\n                    measureApp.currentPointIndex++;\n                } else {\n                    measureApp.currentPointIndex = 0;\n                }\n                measureApp.currentPoint = staticMeasurementPointsModel.get(measureApp.currentPointIndex);\n            }\n\n            function previousPoint(){\n                if (measureApp.currentPointIndex > 0) {\n                    measureApp.currentPointIndex--;\n                } else {\n                    measureApp.currentPointIndex = staticMeasurementPointsModel.count - 1;\n                }\n                measureApp.currentPoint = staticMeasurementPointsModel.get(measureApp.currentPointIndex);\n            }\n\n            ColumnLayout {\n                id: gridLayout\n                anchors.fill: parent\n\n                Label {\n                    text: measureApp.currentPoint.name\n                    font.pointSize: 24\n                    horizontalAlignment: Qt.AlignHCenter\n                    Layout.fillWidth: true\n                }\n                Image {\n                    source: measureApp.currentPoint.image\n                    fillMode: Image.PreserveAspectFit\n                    Layout.fillWidth: true\n                    Layout.fillHeight: true\n                }\n\n                Label {\n                    id: thicknessLabel\n                    text: measureApp.currentPoint.thickness\n                    font.pointSize: 24; font.bold: true\n                    horizontalAlignment: Qt.AlignHCenter\n                    Layout.fillWidth: true\n                }\n\n                Label {\n                    id: messageItem\n                    objectName: \"messageItem\"\n                    text: \"\"\n                    wrapMode: Text.Wrap\n                    Layout.fillWidth: true\n                }\n\n                RowLayout{\n                    FlexButton {\n                        id: prevButton\n                        navigationRow: 0; navigationColumn: 0\n                        text: \"Previous\"\n                        onClicked: {\n                            measureApp.previousPoint()\n                        }\n                    }\n                    Item{\n                       Layout.fillWidth: true\n                    }\n                    FlexButton {\n                        id: nextButton\n                        navigationRow: 0; navigationColumn: 1\n                        text: \"Next\"\n                        onClicked: {\n                           measureApp.nextPoint()\n                        }\n                    }\n                }\n            }\n        }\n    }\n\n    Connections {\n        target: FlexDialog\n        function onKeyBackPressed() {\n            if (stackView.depth > 1) {\n                stackView.pop();\n            } else {\n                FlexDialog.closeDialog();\n            }\n        }\n    }\n\n    ListModel { id: configurationsModel }\n    ListModel { id: blocksModel }\n\n    StackView {\n        id: stackView\n        anchors.fill: parent\n        initialItem: mainComponent\n    }\n}"
+    },
+
+    "wiki_example": {
+      "app_qml": "import QtQuick 2.15\nimport QtQuick.Layouts 1.15\nimport QtQuick.Controls 2.15\nimport \"../lib/utils.js\" as Utils // Included for compliance, though not used\nimport \"../lib\"\nimport FlexUi 1.0\n\n/**\n * Wikipedia Explorer App for Coatmaster Flex\n *\n * This app fetches and displays a random article summary from Wikipedia.\n * It uses the device's proxy to access the Wikipedia REST API.\n */\nItem {\n    id: app\n    anchors.fill: parent\n    property string appId: \"wikipedia-explorer\"\n\n    // --- Properties ---\n    // These properties hold the state and data for the currently displayed article.\n    property bool isLoading: true\n    property string articleTitle: \"Loading Article...\"\n    property string articleText: \"Please wait while we fetch a random article for you. 🧐\"\n    property string articleImageUrl: \"\"\n    property string errorMessage: \"\"\n\n    // --- Data Fetching Logic ---\n    /**\n     * Fetches a random article summary from Wikipedia's API.\n     * Uses XMLHttpRequest and the device's proxy for remote access.\n     */\n    function loadRandomArticle() {\n        isLoading = true;\n        errorMessage = \"\"; // Clear previous errors\n\n        var xhr = new XMLHttpRequest();\n        var apiUrl = \"https://en.wikipedia.org/api/rest_v1/page/random/summary\";\n        var proxyUrl = \"http://localhost:9883/proxy?target=\" + apiUrl;\n\n        xhr.onreadystatechange = function() {\n            if (xhr.readyState === XMLHttpRequest.DONE) {\n                if (xhr.status === 200) {\n                    try {\n                        var response = JSON.parse(xhr.responseText);\n                        articleTitle = response.title;\n                        articleText = response.extract;\n\n                        // Check for a thumbnail and proxy its URL as well\n                        if (response.thumbnail && response.thumbnail.source) {\n                            articleImageUrl = \"http://localhost:9883/proxy?target=\" + response.thumbnail.source;\n                        } else {\n                            articleImageUrl = \"\"; // No image available\n                        }\n\n                    } catch (e) {\n                        console.log(\"Failed to parse Wikipedia response: \" + e);\n                        errorMessage = \"Error: Could not read the data received from Wikipedia.\";\n                    }\n                } else {\n                    console.log(\"Wikipedia API request failed with status: \" + xhr.status);\n                    errorMessage = \"Error: Could not connect to Wikipedia. Please check network connection.\";\n                }\n                isLoading = false;\n            }\n        };\n\n        xhr.open(\"GET\", proxyUrl, true);\n        xhr.send();\n    }\n\n    // Load the first article when the app starts.\n    Component.onCompleted: {\n        loadRandomArticle();\n    }\n\n    // --- Hardware Key Handling ---\n    // This is mandatory for all Coatmaster Flex apps.\n    Connections {\n        target: FlexDialog\n        onKeyBackPressed: {\n            // Closes the application dialog.\n            FlexDialog.closeDialog();\n        }\n        // onTriggerPressed is not used in this app, but the Connections block is required.\n    }\n\n    // --- UI Layout ---\n    ColumnLayout {\n        anchors.fill: parent\n        anchors.margins: 12\n        spacing: 10\n\n\n        FlexButton{\n            text: \"Get New Random Article\"\n            navigationRow: 0\n            navigationColumn: 0\n            onClicked: {\n                loadRandomArticle()\n            }\n        }\n\n        FlexScrollView {\n            id: contentScrollView\n            Layout.fillWidth: true\n            Layout.fillHeight: true\n            navigationRow: 1\n            navigationColumn: 0\n            visible: !isLoading && errorMessage === \"\"\n\n            Text {\n                text: articleTitle\n                font.pixelSize: 22\n                font.bold: true\n                color: FlexDialog.foregroundColor\n                wrapMode: Text.Wrap\n                width: contentScrollView.width - 20\n            }\n\n            Image {\n                id: articleImage\n                source: articleImageUrl\n                visible: articleImageUrl !== \"\"\n                fillMode: Image.PreserveAspectFit\n                width: contentScrollView.width - 20\n                height: 200\n                anchors.horizontalCenter: parent.horizontalCenter\n            }\n\n            Text {\n                text: articleText\n                font.pixelSize: 16\n                color: FlexDialog.foregroundColor\n                wrapMode: Text.Wrap\n                width: contentScrollView.width - 20\n            }\n        }\n\n        // --- Status Indicators ---\n\n        BusyIndicator {\n            anchors.centerIn: parent\n            running: isLoading\n            visible: running\n            z: 2 // Ensure it's on top of other UI elements\n        }\n\n        // Error Message Display\n        Text {\n            anchors.centerIn: parent\n            visible: !isLoading && errorMessage !== \"\"\n            text: errorMessage\n            color: \"red\"\n            font.pixelSize: 18\n            wrapMode: Text.Wrap\n            horizontalAlignment: Text.AlignHCenter\n        }\n    }\n}"
+    }
+  }
+}
