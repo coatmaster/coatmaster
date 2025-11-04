@@ -22,7 +22,7 @@ This folder provides working code examples, documentation, and guides to support
 
 | Folder | Description |
 |---------|--------------|
-| **closed-loop-osv7/** | Contains the closed-loop control demo app, server example, and development documentation. |
+| **flex-apps-sdk/** | Contains the closed-loop control demo app, server example, and development documentation. |
 
 ---
 
