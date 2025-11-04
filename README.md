@@ -8,7 +8,7 @@ The included materials demonstrate how to develop, customize, and integrate QML-
 
 ## 📘 Overview
 
-The **Coatmaster Flex** supports custom applications built in QML, allowing developers and partners to:
+The **coatmaster Flex** supports custom applications built in QML, allowing developers and partners to:
 - Create tailored measurement interfaces.
 - Connect to external control systems via HTTP or TCP/IP.
 - Automate process feedback and closed-loop control.
