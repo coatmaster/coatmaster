@@ -300,3 +300,9 @@ This example demonstrates how to create a closed-loop feedback system between a 
 [Link to Closed-Loop example code](closed-loop-example)
 
 ![Flex Demo App](images/flex_demo_app.png)
+
+### Example App
+
+This example demonstrates a more complex application with various UI components and data fetching from the Coatmaster Flex server.
+
+[Link to Example App code](exampleApp)
